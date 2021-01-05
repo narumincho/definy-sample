@@ -5,7 +5,7 @@
   "main": "index.js",
   "dependencies": {},
   "devDependencies": {
-    "@types/node": "^14.11.2",
+    "@types/node": "^14.14.20",
     "@types/prettier": "^2.1.1",
     "definy-core": "^0.2.3",
     "prettier": "^2.1.2",
