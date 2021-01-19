@@ -6,13 +6,10 @@ import * as a from "util";
 /**
  * UserId, ProjectIdなどのIdをバイナリ形式にエンコードする
  */
-export const encodeId = (value: string): ReadonlyArray<number> => {
-  const result: Array<number> = [];
-  for (let i = 0; i < 16; i += 1) {
-    result[i] = Number.parseInt(value.slice(i * 2, i * 2 + 2), 16);
-  }
-  return result;
-};
+export const encodeId = (value: string): ReadonlyArray<number> =>
+  Array.from({ length: 16 }, (_: undefined, i: number): number =>
+    Number.parseInt(value.slice(i * 2, i * 2 + 2), 16)
+  );
 
 /**
  * バイナリ形式をUserId, ProjectIdなどのIdにデコードする
@@ -32,13 +29,10 @@ export const decodeId = (
 /**
  * ImageTokenなどのTokenをバイナリ形式にエンコードする
  */
-export const encodeToken = (value: string): ReadonlyArray<number> => {
-  const result: Array<number> = [];
-  for (let i = 0; i < 32; i += 1) {
-    result[i] = Number.parseInt(value.slice(i * 2, i * 2 + 2), 16);
-  }
-  return result;
-};
+export const encodeToken = (value: string): ReadonlyArray<number> =>
+  Array.from({ length: 32 }, (_: undefined, i: number): number =>
+    Number.parseInt(value.slice(i * 2, i * 2 + 2), 16)
+  );
 
 /**
  * バイナリ形式をImageTokenなどのTokenにエンコードする
@@ -113,6 +107,12 @@ export type Result<ok extends unknown, error extends unknown> =
 export type String = string;
 
 /**
+ * Unit. 1つの値しかない型. JavaScriptのundefinedで扱う
+ * @typePartId 2df0cf39f4b05c960c34856663d26fd1
+ */
+export type Unit = undefined;
+
+/**
  * プロジェクトの識別子
  * @typePartId 4e3ab0f9499404a5fa100c4b57835906
  */
@@ -161,10 +161,10 @@ export type TypePartId = string & { readonly _typePartId: never };
 export type TagId = string & { readonly _tagId: never };
 
 /**
- * アクセストークン. アクセストークンを持っていれば特定のユーザーであるが証明される. これが盗まれた場合,不正に得た相手はそのユーザーになりすますことができる
+ * アカウントトークン. アカウントトークンを持っていればアクセストークンをDefinyのサーバーにリクエストした際に得られるIDのアカウントを保有していると証明できる. サーバーにハッシュ化したものを保存している. これが盗まれた場合,不正に得た人はアカウントを乗っ取ることができる. 有効期限はなし, 最後に発行したアカウントトークン以外は無効になる
  * @typePartId be993929300452364c8bb658609f682d
  */
-export type AccessToken = string & { readonly _accessToken: never };
+export type AccountToken = string & { readonly _accountToken: never };
 
 /**
  * コミット内に入る. パーツのハッシュ化したもの. ハッシュ化にはパーツ名やドキュメントも含める
@@ -519,10 +519,6 @@ export type TypePart = {
    */
   readonly projectId: ProjectId;
   /**
-   * この型パーツが作成されたコミット
-   */
-  readonly createCommitId: CommitId;
-  /**
    * コンパイラに与える,この型を表現するのにどういう特殊な状態にするかという情報
    */
   readonly attribute: Maybe<TypeAttribute>;
@@ -540,7 +536,7 @@ export type TypePart = {
  * コンパイラに向けた, 型のデータ形式をどうするかの情報
  * @typePartId 225e93ce3e35aa0bd76d07ea6f6b89cf
  */
-export type TypeAttribute = "AsBoolean";
+export type TypeAttribute = "AsBoolean" | "AsUndefined";
 
 /**
  * 型パラメーター
@@ -822,7 +818,7 @@ export type CreateProjectParameter = {
   /**
    * プロジェクトを作るときのアカウント
    */
-  readonly accessToken: AccessToken;
+  readonly accountToken: AccountToken;
   /**
    * プロジェクト名
    */
@@ -837,7 +833,7 @@ export type CreateIdeaParameter = {
   /**
    * プロジェクトを作るときのアカウント
    */
-  readonly accessToken: AccessToken;
+  readonly accountToken: AccountToken;
   /**
    * アイデア名
    */
@@ -856,7 +852,7 @@ export type AddCommentParameter = {
   /**
    * コメントをするユーザー
    */
-  readonly accessToken: AccessToken;
+  readonly accountToken: AccountToken;
   /**
    * コメントを追加するアイデア
    */
@@ -875,7 +871,7 @@ export type AddCommitParameter = {
   /**
    * 提案を作成するユーザー
    */
-  readonly accessToken: AccessToken;
+  readonly accountToken: AccountToken;
   /**
    * 提案に関連付けられるアイデア
    */
@@ -886,11 +882,11 @@ export type AddCommitParameter = {
  * コミットを確定状態にしたり, 承認したりするときなどに使う
  * @typePartId 74280d6a5db1d48b6815a73a819756c3
  */
-export type AccessTokenAndCommitId = {
+export type AccountTokenAndCommitId = {
   /**
-   * アクセストークン
+   * アカウントトークン
    */
-  readonly accessToken: AccessToken;
+  readonly accountToken: AccountToken;
   /**
    * commitId
    */
@@ -902,37 +898,28 @@ export type AccessTokenAndCommitId = {
  * @typePartId d562fe803c7e40c32269e24c1435e4d1
  */
 export type LogInState =
-  | { readonly _: "WaitLoadingAccessTokenFromIndexedDB" }
-  | { readonly _: "LoadingAccessTokenFromIndexedDB" }
+  | { readonly _: "LoadingAccountTokenFromIndexedDB" }
   | { readonly _: "Guest" }
-  | {
-      readonly _: "WaitRequestingLogInUrl";
-      readonly openIdConnectProvider: OpenIdConnectProvider;
-    }
   | {
       readonly _: "RequestingLogInUrl";
       readonly openIdConnectProvider: OpenIdConnectProvider;
     }
   | { readonly _: "JumpingToLogInPage"; readonly string: String }
-  | {
-      readonly _: "WaitVerifyingAccessToken";
-      readonly accessToken: AccessToken;
-    }
-  | { readonly _: "VerifyingAccessToken"; readonly accessToken: AccessToken }
+  | { readonly _: "VerifyingAccountToken"; readonly accountToken: AccountToken }
   | {
       readonly _: "LoggedIn";
-      readonly accessTokenAndUserId: AccessTokenAndUserId;
+      readonly accountTokenAndUserId: AccountTokenAndUserId;
     };
 
 /**
- * AccessTokenとUserId
+ * AccountTokenとUserId
  * @typePartId 895fb0f083f1828da2c56b25ed77eb54
  */
-export type AccessTokenAndUserId = {
+export type AccountTokenAndUserId = {
   /**
-   * AccessToken
+   * accountToken
    */
-  readonly accessToken: AccessToken;
+  readonly accountToken: AccountToken;
   /**
    * UserId
    */
@@ -940,18 +927,18 @@ export type AccessTokenAndUserId = {
 };
 
 /**
- * 取得日時とデータ本体. データ本体がない場合も含まれているのでMaybe
+ * 取得日時と任意のデータ
  * @typePartId f7590073f3ed06452193dddbb91e82e0
  */
-export type Resource<data extends unknown> = {
+export type WithTime<data extends unknown> = {
   /**
    * データベースから取得した日時
    */
   readonly getTime: Time;
   /**
-   * データ本体
+   * データ
    */
-  readonly dataMaybe: Maybe<data>;
+  readonly data: data;
 };
 
 /**
@@ -959,30 +946,54 @@ export type Resource<data extends unknown> = {
  * @typePartId 833fbf3dcab7e9365f334f8b00c24d55
  */
 export type ResourceState<data extends unknown> =
-  | { readonly _: "Loaded"; readonly dataResource: Resource<data> }
-  | { readonly _: "Unknown" }
-  | { readonly _: "WaitLoading" }
-  | { readonly _: "Loading" }
-  | { readonly _: "WaitRequesting" }
-  | { readonly _: "Requesting" }
-  | { readonly _: "WaitUpdating"; readonly dataResource: Resource<data> }
-  | { readonly _: "Updating"; readonly dataResource: Resource<data> }
-  | { readonly _: "WaitRetrying" }
-  | { readonly _: "Retrying" };
+  | { readonly _: "Loaded"; readonly dataWithTime: WithTime<data> }
+  | { readonly _: "Deleted"; readonly time: Time }
+  | { readonly _: "Unknown"; readonly time: Time }
+  | { readonly _: "Requesting" };
 
 /**
- * キーであるTokenによってデータが必ず1つに決まるもの. 絶対に更新されない
+ * キーであるTokenによってデータが必ず1つに決まるもの. 絶対に更新されない. リソースがないということはデータが不正な状態になっているということ
  * @typePartId 134205335ce83693fd83994e907acabd
  */
 export type StaticResourceState<data extends unknown> =
   | { readonly _: "Loaded"; readonly data: data }
   | { readonly _: "Unknown" }
-  | { readonly _: "WaitLoading" }
   | { readonly _: "Loading" }
-  | { readonly _: "WaitRequesting" }
-  | { readonly _: "Requesting" }
-  | { readonly _: "WaitRetrying" }
-  | { readonly _: "Retrying" };
+  | { readonly _: "Requesting" };
+
+/**
+ * アカウントトークンとプロジェクトID
+ * @typePartId 4143a0787c0f06dfddc2f2f13f7e7a20
+ */
+export type AccountTokenAndProjectId = {
+  /**
+   * アカウントトークン
+   */
+  readonly accountToken: AccountToken;
+  /**
+   * プロジェクトID
+   */
+  readonly projectId: ProjectId;
+};
+
+/**
+ * 型パーツのリストを変更する
+ * @typePartId 0d8c602dce6d495c31fbde469acf235d
+ */
+export type SetTypePartListParameter = {
+  /**
+   * アカウントトークン
+   */
+  readonly accountToken: AccountToken;
+  /**
+   * プロジェクトID
+   */
+  readonly projectId: ProjectId;
+  /**
+   * 型パーツのリスト
+   */
+  readonly typePartList: List<IdAndData<TypePartId, TypePart>>;
+};
 
 /**
  * サンプルユーザー. 名前(必須)と年齢(必須ではない)が含まれている
@@ -1114,9 +1125,9 @@ export const List: {
 } = {
   codec: <e extends unknown>(eCodec: Codec<e>): Codec<List<e>> => ({
     encode: (value: List<e>): ReadonlyArray<number> => {
-      let result: Array<number> = Int32.codec.encode(value.length) as Array<
-        number
-      >;
+      let result: Array<number> = Int32.codec.encode(
+        value.length
+      ) as Array<number>;
       for (const element of value) {
         result = result.concat(eCodec.encode(element));
       }
@@ -1316,6 +1327,30 @@ export const String: { readonly codec: Codec<String> } = {
 };
 
 /**
+ * Unit. 1つの値しかない型. JavaScriptのundefinedで扱う
+ * @typePartId 2df0cf39f4b05c960c34856663d26fd1
+ */
+export const Unit: {
+  /**
+   * Unit型にある.唯一の値
+   */
+  readonly Unit: Unit;
+  readonly codec: Codec<Unit>;
+} = {
+  Unit: undefined,
+  codec: {
+    encode: (value: Unit): ReadonlyArray<number> => [],
+    decode: (
+      index: number,
+      binary: Uint8Array
+    ): { readonly result: Unit; readonly nextIndex: number } => ({
+      result: Unit.Unit,
+      nextIndex: index,
+    }),
+  },
+};
+
+/**
  * プロジェクトの識別子
  * @typePartId 4e3ab0f9499404a5fa100c4b57835906
  */
@@ -1460,18 +1495,18 @@ export const TagId: { readonly codec: Codec<TagId> } = {
 };
 
 /**
- * アクセストークン. アクセストークンを持っていれば特定のユーザーであるが証明される. これが盗まれた場合,不正に得た相手はそのユーザーになりすますことができる
+ * アカウントトークン. アカウントトークンを持っていればアクセストークンをDefinyのサーバーにリクエストした際に得られるIDのアカウントを保有していると証明できる. サーバーにハッシュ化したものを保存している. これが盗まれた場合,不正に得た人はアカウントを乗っ取ることができる. 有効期限はなし, 最後に発行したアカウントトークン以外は無効になる
  * @typePartId be993929300452364c8bb658609f682d
  */
-export const AccessToken: { readonly codec: Codec<AccessToken> } = {
+export const AccountToken: { readonly codec: Codec<AccountToken> } = {
   codec: {
-    encode: (value: AccessToken): ReadonlyArray<number> => encodeToken(value),
+    encode: (value: AccountToken): ReadonlyArray<number> => encodeToken(value),
     decode: (
       index: number,
       binary: Uint8Array
-    ): { readonly result: AccessToken; readonly nextIndex: number } =>
+    ): { readonly result: AccountToken; readonly nextIndex: number } =>
       decodeToken(index, binary) as {
-        readonly result: AccessToken;
+        readonly result: AccountToken;
         readonly nextIndex: number;
       },
   },
@@ -2479,7 +2514,6 @@ export const TypePart: { readonly codec: Codec<TypePart> } = {
         .encode(value.name)
         .concat(String.codec.encode(value.description))
         .concat(ProjectId.codec.encode(value.projectId))
-        .concat(CommitId.codec.encode(value.createCommitId))
         .concat(Maybe.codec(TypeAttribute.codec).encode(value.attribute))
         .concat(List.codec(TypeParameter.codec).encode(value.typeParameterList))
         .concat(TypePartBody.codec.encode(value.body)),
@@ -2499,15 +2533,11 @@ export const TypePart: { readonly codec: Codec<TypePart> } = {
         readonly result: ProjectId;
         readonly nextIndex: number;
       } = ProjectId.codec.decode(descriptionAndNextIndex.nextIndex, binary);
-      const createCommitIdAndNextIndex: {
-        readonly result: CommitId;
-        readonly nextIndex: number;
-      } = CommitId.codec.decode(projectIdAndNextIndex.nextIndex, binary);
       const attributeAndNextIndex: {
         readonly result: Maybe<TypeAttribute>;
         readonly nextIndex: number;
       } = Maybe.codec(TypeAttribute.codec).decode(
-        createCommitIdAndNextIndex.nextIndex,
+        projectIdAndNextIndex.nextIndex,
         binary
       );
       const typeParameterListAndNextIndex: {
@@ -2529,7 +2559,6 @@ export const TypePart: { readonly codec: Codec<TypePart> } = {
           name: nameAndNextIndex.result,
           description: descriptionAndNextIndex.result,
           projectId: projectIdAndNextIndex.result,
-          createCommitId: createCommitIdAndNextIndex.result,
           attribute: attributeAndNextIndex.result,
           typeParameterList: typeParameterListAndNextIndex.result,
           body: bodyAndNextIndex.result,
@@ -2546,17 +2575,25 @@ export const TypePart: { readonly codec: Codec<TypePart> } = {
  */
 export const TypeAttribute: {
   /**
-   * JavaScriptのbooleanとしれ扱うように指示する. 定義が True | Falseのような形のみをサポートする
+   * JavaScript, TypeScript で boolean として扱うように指示する. 定義が2つのパターンで両方パラメーターなし false, trueの順である必要がある
    */
   readonly AsBoolean: TypeAttribute;
+  /**
+   * JavaScript, TypeScript で undefined として扱うように指示する. 定義が1つのパターンでパラメーターなしである必要がある
+   */
+  readonly AsUndefined: TypeAttribute;
   readonly codec: Codec<TypeAttribute>;
 } = {
   AsBoolean: "AsBoolean",
+  AsUndefined: "AsUndefined",
   codec: {
     encode: (value: TypeAttribute): ReadonlyArray<number> => {
       switch (value) {
         case "AsBoolean": {
           return [0];
+        }
+        case "AsUndefined": {
+          return [1];
         }
       }
     },
@@ -2571,6 +2608,12 @@ export const TypeAttribute: {
       if (patternIndex.result === 0) {
         return {
           result: TypeAttribute.AsBoolean,
+          nextIndex: patternIndex.nextIndex,
+        };
+      }
+      if (patternIndex.result === 1) {
+        return {
+          result: TypeAttribute.AsUndefined,
           nextIndex: patternIndex.nextIndex,
         };
       }
@@ -3788,8 +3831,8 @@ export const CreateProjectParameter: {
 } = {
   codec: {
     encode: (value: CreateProjectParameter): ReadonlyArray<number> =>
-      AccessToken.codec
-        .encode(value.accessToken)
+      AccountToken.codec
+        .encode(value.accountToken)
         .concat(String.codec.encode(value.projectName)),
     decode: (
       index: number,
@@ -3798,17 +3841,17 @@ export const CreateProjectParameter: {
       readonly result: CreateProjectParameter;
       readonly nextIndex: number;
     } => {
-      const accessTokenAndNextIndex: {
-        readonly result: AccessToken;
+      const accountTokenAndNextIndex: {
+        readonly result: AccountToken;
         readonly nextIndex: number;
-      } = AccessToken.codec.decode(index, binary);
+      } = AccountToken.codec.decode(index, binary);
       const projectNameAndNextIndex: {
         readonly result: String;
         readonly nextIndex: number;
-      } = String.codec.decode(accessTokenAndNextIndex.nextIndex, binary);
+      } = String.codec.decode(accountTokenAndNextIndex.nextIndex, binary);
       return {
         result: {
-          accessToken: accessTokenAndNextIndex.result,
+          accountToken: accountTokenAndNextIndex.result,
           projectName: projectNameAndNextIndex.result,
         },
         nextIndex: projectNameAndNextIndex.nextIndex,
@@ -3826,29 +3869,29 @@ export const CreateIdeaParameter: {
 } = {
   codec: {
     encode: (value: CreateIdeaParameter): ReadonlyArray<number> =>
-      AccessToken.codec
-        .encode(value.accessToken)
+      AccountToken.codec
+        .encode(value.accountToken)
         .concat(String.codec.encode(value.ideaName))
         .concat(IdeaId.codec.encode(value.parentId)),
     decode: (
       index: number,
       binary: Uint8Array
     ): { readonly result: CreateIdeaParameter; readonly nextIndex: number } => {
-      const accessTokenAndNextIndex: {
-        readonly result: AccessToken;
+      const accountTokenAndNextIndex: {
+        readonly result: AccountToken;
         readonly nextIndex: number;
-      } = AccessToken.codec.decode(index, binary);
+      } = AccountToken.codec.decode(index, binary);
       const ideaNameAndNextIndex: {
         readonly result: String;
         readonly nextIndex: number;
-      } = String.codec.decode(accessTokenAndNextIndex.nextIndex, binary);
+      } = String.codec.decode(accountTokenAndNextIndex.nextIndex, binary);
       const parentIdAndNextIndex: {
         readonly result: IdeaId;
         readonly nextIndex: number;
       } = IdeaId.codec.decode(ideaNameAndNextIndex.nextIndex, binary);
       return {
         result: {
-          accessToken: accessTokenAndNextIndex.result,
+          accountToken: accountTokenAndNextIndex.result,
           ideaName: ideaNameAndNextIndex.result,
           parentId: parentIdAndNextIndex.result,
         },
@@ -3867,29 +3910,29 @@ export const AddCommentParameter: {
 } = {
   codec: {
     encode: (value: AddCommentParameter): ReadonlyArray<number> =>
-      AccessToken.codec
-        .encode(value.accessToken)
+      AccountToken.codec
+        .encode(value.accountToken)
         .concat(IdeaId.codec.encode(value.ideaId))
         .concat(String.codec.encode(value.comment)),
     decode: (
       index: number,
       binary: Uint8Array
     ): { readonly result: AddCommentParameter; readonly nextIndex: number } => {
-      const accessTokenAndNextIndex: {
-        readonly result: AccessToken;
+      const accountTokenAndNextIndex: {
+        readonly result: AccountToken;
         readonly nextIndex: number;
-      } = AccessToken.codec.decode(index, binary);
+      } = AccountToken.codec.decode(index, binary);
       const ideaIdAndNextIndex: {
         readonly result: IdeaId;
         readonly nextIndex: number;
-      } = IdeaId.codec.decode(accessTokenAndNextIndex.nextIndex, binary);
+      } = IdeaId.codec.decode(accountTokenAndNextIndex.nextIndex, binary);
       const commentAndNextIndex: {
         readonly result: String;
         readonly nextIndex: number;
       } = String.codec.decode(ideaIdAndNextIndex.nextIndex, binary);
       return {
         result: {
-          accessToken: accessTokenAndNextIndex.result,
+          accountToken: accountTokenAndNextIndex.result,
           ideaId: ideaIdAndNextIndex.result,
           comment: commentAndNextIndex.result,
         },
@@ -3908,24 +3951,24 @@ export const AddCommitParameter: {
 } = {
   codec: {
     encode: (value: AddCommitParameter): ReadonlyArray<number> =>
-      AccessToken.codec
-        .encode(value.accessToken)
+      AccountToken.codec
+        .encode(value.accountToken)
         .concat(IdeaId.codec.encode(value.ideaId)),
     decode: (
       index: number,
       binary: Uint8Array
     ): { readonly result: AddCommitParameter; readonly nextIndex: number } => {
-      const accessTokenAndNextIndex: {
-        readonly result: AccessToken;
+      const accountTokenAndNextIndex: {
+        readonly result: AccountToken;
         readonly nextIndex: number;
-      } = AccessToken.codec.decode(index, binary);
+      } = AccountToken.codec.decode(index, binary);
       const ideaIdAndNextIndex: {
         readonly result: IdeaId;
         readonly nextIndex: number;
-      } = IdeaId.codec.decode(accessTokenAndNextIndex.nextIndex, binary);
+      } = IdeaId.codec.decode(accountTokenAndNextIndex.nextIndex, binary);
       return {
         result: {
-          accessToken: accessTokenAndNextIndex.result,
+          accountToken: accountTokenAndNextIndex.result,
           ideaId: ideaIdAndNextIndex.result,
         },
         nextIndex: ideaIdAndNextIndex.nextIndex,
@@ -3938,32 +3981,32 @@ export const AddCommitParameter: {
  * コミットを確定状態にしたり, 承認したりするときなどに使う
  * @typePartId 74280d6a5db1d48b6815a73a819756c3
  */
-export const AccessTokenAndCommitId: {
-  readonly codec: Codec<AccessTokenAndCommitId>;
+export const AccountTokenAndCommitId: {
+  readonly codec: Codec<AccountTokenAndCommitId>;
 } = {
   codec: {
-    encode: (value: AccessTokenAndCommitId): ReadonlyArray<number> =>
-      AccessToken.codec
-        .encode(value.accessToken)
+    encode: (value: AccountTokenAndCommitId): ReadonlyArray<number> =>
+      AccountToken.codec
+        .encode(value.accountToken)
         .concat(CommitId.codec.encode(value.commitId)),
     decode: (
       index: number,
       binary: Uint8Array
     ): {
-      readonly result: AccessTokenAndCommitId;
+      readonly result: AccountTokenAndCommitId;
       readonly nextIndex: number;
     } => {
-      const accessTokenAndNextIndex: {
-        readonly result: AccessToken;
+      const accountTokenAndNextIndex: {
+        readonly result: AccountToken;
         readonly nextIndex: number;
-      } = AccessToken.codec.decode(index, binary);
+      } = AccountToken.codec.decode(index, binary);
       const commitIdAndNextIndex: {
         readonly result: CommitId;
         readonly nextIndex: number;
-      } = CommitId.codec.decode(accessTokenAndNextIndex.nextIndex, binary);
+      } = CommitId.codec.decode(accountTokenAndNextIndex.nextIndex, binary);
       return {
         result: {
-          accessToken: accessTokenAndNextIndex.result,
+          accountToken: accountTokenAndNextIndex.result,
           commitId: commitIdAndNextIndex.result,
         },
         nextIndex: commitIdAndNextIndex.nextIndex,
@@ -3978,21 +4021,13 @@ export const AccessTokenAndCommitId: {
  */
 export const LogInState: {
   /**
-   * アクセストークンをindexedDBから読み取る状態
+   * アカウントトークンをindexedDBから読み取っている状態
    */
-  readonly WaitLoadingAccessTokenFromIndexedDB: LogInState;
-  /**
-   * アクセストークンをindexedDBから読み取っている状態
-   */
-  readonly LoadingAccessTokenFromIndexedDB: LogInState;
+  readonly LoadingAccountTokenFromIndexedDB: LogInState;
   /**
    * ログインしていない状態
    */
   readonly Guest: LogInState;
-  /**
-   * ログインボタンを押したあとの状態
-   */
-  readonly WaitRequestingLogInUrl: (a: OpenIdConnectProvider) => LogInState;
   /**
    * ログインへの画面URLをリクエストした状態
    */
@@ -4002,27 +4037,17 @@ export const LogInState: {
    */
   readonly JumpingToLogInPage: (a: String) => LogInState;
   /**
-   * アクセストークンの検証とログインしているユーザーの情報を取得する状態
+   * アカウントトークンの検証とログインしているユーザーの情報を取得している状態
    */
-  readonly WaitVerifyingAccessToken: (a: AccessToken) => LogInState;
-  /**
-   * アクセストークンの検証とログインしているユーザーの情報を取得している状態
-   */
-  readonly VerifyingAccessToken: (a: AccessToken) => LogInState;
+  readonly VerifyingAccountToken: (a: AccountToken) => LogInState;
   /**
    * ログインしている状態
    */
-  readonly LoggedIn: (a: AccessTokenAndUserId) => LogInState;
+  readonly LoggedIn: (a: AccountTokenAndUserId) => LogInState;
   readonly codec: Codec<LogInState>;
 } = {
-  WaitLoadingAccessTokenFromIndexedDB: {
-    _: "WaitLoadingAccessTokenFromIndexedDB",
-  },
-  LoadingAccessTokenFromIndexedDB: { _: "LoadingAccessTokenFromIndexedDB" },
+  LoadingAccountTokenFromIndexedDB: { _: "LoadingAccountTokenFromIndexedDB" },
   Guest: { _: "Guest" },
-  WaitRequestingLogInUrl: (
-    openIdConnectProvider: OpenIdConnectProvider
-  ): LogInState => ({ _: "WaitRequestingLogInUrl", openIdConnectProvider }),
   RequestingLogInUrl: (
     openIdConnectProvider: OpenIdConnectProvider
   ): LogInState => ({ _: "RequestingLogInUrl", openIdConnectProvider }),
@@ -4030,52 +4055,37 @@ export const LogInState: {
     _: "JumpingToLogInPage",
     string: string_,
   }),
-  WaitVerifyingAccessToken: (accessToken: AccessToken): LogInState => ({
-    _: "WaitVerifyingAccessToken",
-    accessToken,
+  VerifyingAccountToken: (accountToken: AccountToken): LogInState => ({
+    _: "VerifyingAccountToken",
+    accountToken,
   }),
-  VerifyingAccessToken: (accessToken: AccessToken): LogInState => ({
-    _: "VerifyingAccessToken",
-    accessToken,
-  }),
-  LoggedIn: (accessTokenAndUserId: AccessTokenAndUserId): LogInState => ({
+  LoggedIn: (accountTokenAndUserId: AccountTokenAndUserId): LogInState => ({
     _: "LoggedIn",
-    accessTokenAndUserId,
+    accountTokenAndUserId,
   }),
   codec: {
     encode: (value: LogInState): ReadonlyArray<number> => {
       switch (value._) {
-        case "WaitLoadingAccessTokenFromIndexedDB": {
+        case "LoadingAccountTokenFromIndexedDB": {
           return [0];
         }
-        case "LoadingAccessTokenFromIndexedDB": {
+        case "Guest": {
           return [1];
         }
-        case "Guest": {
-          return [2];
-        }
-        case "WaitRequestingLogInUrl": {
-          return [3].concat(
-            OpenIdConnectProvider.codec.encode(value.openIdConnectProvider)
-          );
-        }
         case "RequestingLogInUrl": {
-          return [4].concat(
+          return [2].concat(
             OpenIdConnectProvider.codec.encode(value.openIdConnectProvider)
           );
         }
         case "JumpingToLogInPage": {
-          return [5].concat(String.codec.encode(value.string));
+          return [3].concat(String.codec.encode(value.string));
         }
-        case "WaitVerifyingAccessToken": {
-          return [6].concat(AccessToken.codec.encode(value.accessToken));
-        }
-        case "VerifyingAccessToken": {
-          return [7].concat(AccessToken.codec.encode(value.accessToken));
+        case "VerifyingAccountToken": {
+          return [4].concat(AccountToken.codec.encode(value.accountToken));
         }
         case "LoggedIn": {
-          return [8].concat(
-            AccessTokenAndUserId.codec.encode(value.accessTokenAndUserId)
+          return [5].concat(
+            AccountTokenAndUserId.codec.encode(value.accountTokenAndUserId)
           );
         }
       }
@@ -4090,30 +4100,14 @@ export const LogInState: {
       } = Int32.codec.decode(index, binary);
       if (patternIndex.result === 0) {
         return {
-          result: LogInState.WaitLoadingAccessTokenFromIndexedDB,
+          result: LogInState.LoadingAccountTokenFromIndexedDB,
           nextIndex: patternIndex.nextIndex,
         };
       }
       if (patternIndex.result === 1) {
-        return {
-          result: LogInState.LoadingAccessTokenFromIndexedDB,
-          nextIndex: patternIndex.nextIndex,
-        };
-      }
-      if (patternIndex.result === 2) {
         return { result: LogInState.Guest, nextIndex: patternIndex.nextIndex };
       }
-      if (patternIndex.result === 3) {
-        const result: {
-          readonly result: OpenIdConnectProvider;
-          readonly nextIndex: number;
-        } = OpenIdConnectProvider.codec.decode(patternIndex.nextIndex, binary);
-        return {
-          result: LogInState.WaitRequestingLogInUrl(result.result),
-          nextIndex: result.nextIndex,
-        };
-      }
-      if (patternIndex.result === 4) {
+      if (patternIndex.result === 2) {
         const result: {
           readonly result: OpenIdConnectProvider;
           readonly nextIndex: number;
@@ -4123,7 +4117,7 @@ export const LogInState: {
           nextIndex: result.nextIndex,
         };
       }
-      if (patternIndex.result === 5) {
+      if (patternIndex.result === 3) {
         const result: {
           readonly result: String;
           readonly nextIndex: number;
@@ -4133,31 +4127,21 @@ export const LogInState: {
           nextIndex: result.nextIndex,
         };
       }
-      if (patternIndex.result === 6) {
+      if (patternIndex.result === 4) {
         const result: {
-          readonly result: AccessToken;
+          readonly result: AccountToken;
           readonly nextIndex: number;
-        } = AccessToken.codec.decode(patternIndex.nextIndex, binary);
+        } = AccountToken.codec.decode(patternIndex.nextIndex, binary);
         return {
-          result: LogInState.WaitVerifyingAccessToken(result.result),
+          result: LogInState.VerifyingAccountToken(result.result),
           nextIndex: result.nextIndex,
         };
       }
-      if (patternIndex.result === 7) {
+      if (patternIndex.result === 5) {
         const result: {
-          readonly result: AccessToken;
+          readonly result: AccountTokenAndUserId;
           readonly nextIndex: number;
-        } = AccessToken.codec.decode(patternIndex.nextIndex, binary);
-        return {
-          result: LogInState.VerifyingAccessToken(result.result),
-          nextIndex: result.nextIndex,
-        };
-      }
-      if (patternIndex.result === 8) {
-        const result: {
-          readonly result: AccessTokenAndUserId;
-          readonly nextIndex: number;
-        } = AccessTokenAndUserId.codec.decode(patternIndex.nextIndex, binary);
+        } = AccountTokenAndUserId.codec.decode(patternIndex.nextIndex, binary);
         return {
           result: LogInState.LoggedIn(result.result),
           nextIndex: result.nextIndex,
@@ -4169,35 +4153,35 @@ export const LogInState: {
 };
 
 /**
- * AccessTokenとUserId
+ * AccountTokenとUserId
  * @typePartId 895fb0f083f1828da2c56b25ed77eb54
  */
-export const AccessTokenAndUserId: {
-  readonly codec: Codec<AccessTokenAndUserId>;
+export const AccountTokenAndUserId: {
+  readonly codec: Codec<AccountTokenAndUserId>;
 } = {
   codec: {
-    encode: (value: AccessTokenAndUserId): ReadonlyArray<number> =>
-      AccessToken.codec
-        .encode(value.accessToken)
+    encode: (value: AccountTokenAndUserId): ReadonlyArray<number> =>
+      AccountToken.codec
+        .encode(value.accountToken)
         .concat(UserId.codec.encode(value.userId)),
     decode: (
       index: number,
       binary: Uint8Array
     ): {
-      readonly result: AccessTokenAndUserId;
+      readonly result: AccountTokenAndUserId;
       readonly nextIndex: number;
     } => {
-      const accessTokenAndNextIndex: {
-        readonly result: AccessToken;
+      const accountTokenAndNextIndex: {
+        readonly result: AccountToken;
         readonly nextIndex: number;
-      } = AccessToken.codec.decode(index, binary);
+      } = AccountToken.codec.decode(index, binary);
       const userIdAndNextIndex: {
         readonly result: UserId;
         readonly nextIndex: number;
-      } = UserId.codec.decode(accessTokenAndNextIndex.nextIndex, binary);
+      } = UserId.codec.decode(accountTokenAndNextIndex.nextIndex, binary);
       return {
         result: {
-          accessToken: accessTokenAndNextIndex.result,
+          accountToken: accountTokenAndNextIndex.result,
           userId: userIdAndNextIndex.result,
         },
         nextIndex: userIdAndNextIndex.nextIndex,
@@ -4207,39 +4191,37 @@ export const AccessTokenAndUserId: {
 };
 
 /**
- * 取得日時とデータ本体. データ本体がない場合も含まれているのでMaybe
+ * 取得日時と任意のデータ
  * @typePartId f7590073f3ed06452193dddbb91e82e0
  */
-export const Resource: {
+export const WithTime: {
   readonly codec: <data extends unknown>(
     a: Codec<data>
-  ) => Codec<Resource<data>>;
+  ) => Codec<WithTime<data>>;
 } = {
   codec: <data extends unknown>(
     dataCodec: Codec<data>
-  ): Codec<Resource<data>> => ({
-    encode: (value: Resource<data>): ReadonlyArray<number> =>
-      Time.codec
-        .encode(value.getTime)
-        .concat(Maybe.codec(dataCodec).encode(value.dataMaybe)),
+  ): Codec<WithTime<data>> => ({
+    encode: (value: WithTime<data>): ReadonlyArray<number> =>
+      Time.codec.encode(value.getTime).concat(dataCodec.encode(value.data)),
     decode: (
       index: number,
       binary: Uint8Array
-    ): { readonly result: Resource<data>; readonly nextIndex: number } => {
+    ): { readonly result: WithTime<data>; readonly nextIndex: number } => {
       const getTimeAndNextIndex: {
         readonly result: Time;
         readonly nextIndex: number;
       } = Time.codec.decode(index, binary);
-      const dataMaybeAndNextIndex: {
-        readonly result: Maybe<data>;
+      const dataAndNextIndex: {
+        readonly result: data;
         readonly nextIndex: number;
-      } = Maybe.codec(dataCodec).decode(getTimeAndNextIndex.nextIndex, binary);
+      } = dataCodec.decode(getTimeAndNextIndex.nextIndex, binary);
       return {
         result: {
           getTime: getTimeAndNextIndex.result,
-          dataMaybe: dataMaybeAndNextIndex.result,
+          data: dataAndNextIndex.result,
         },
-        nextIndex: dataMaybeAndNextIndex.nextIndex,
+        nextIndex: dataAndNextIndex.nextIndex,
       };
     },
   }),
@@ -4254,77 +4236,37 @@ export const ResourceState: {
    * 読み込み済み
    */
   readonly Loaded: <data extends unknown>(
-    a: Resource<data>
+    a: WithTime<data>
   ) => ResourceState<data>;
+  /**
+   * 削除されたか, 存在しない
+   */
+  readonly Deleted: <data extends unknown>(a: Time) => ResourceState<data>;
   /**
    * データを取得できなかった (サーバーの障害, オフライン)
    */
-  readonly Unknown: <data extends unknown>() => ResourceState<data>;
-  /**
-   * indexedDBにアクセス待ち
-   */
-  readonly WaitLoading: <data extends unknown>() => ResourceState<data>;
-  /**
-   * indexedDBにアクセス中
-   */
-  readonly Loading: <data extends unknown>() => ResourceState<data>;
-  /**
-   * サーバに問い合わせ待ち
-   */
-  readonly WaitRequesting: <data extends unknown>() => ResourceState<data>;
+  readonly Unknown: <data extends unknown>(a: Time) => ResourceState<data>;
   /**
    * サーバに問い合わせ中
    */
   readonly Requesting: <data extends unknown>() => ResourceState<data>;
-  /**
-   * 更新待ち
-   */
-  readonly WaitUpdating: <data extends unknown>(
-    a: Resource<data>
-  ) => ResourceState<data>;
-  /**
-   * サーバーに問い合わせてリソースを更新中
-   */
-  readonly Updating: <data extends unknown>(
-    a: Resource<data>
-  ) => ResourceState<data>;
-  /**
-   * Unknownだったリソースをサーバーに問い合わせ待ち
-   */
-  readonly WaitRetrying: <data extends unknown>() => ResourceState<data>;
-  /**
-   * Unknownだったリソースをサーバーに問い合わせ中
-   */
-  readonly Retrying: <data extends unknown>() => ResourceState<data>;
   readonly codec: <data extends unknown>(
     a: Codec<data>
   ) => Codec<ResourceState<data>>;
 } = {
   Loaded: <data extends unknown>(
-    dataResource: Resource<data>
-  ): ResourceState<data> => ({ _: "Loaded", dataResource }),
-  Unknown: <data extends unknown>(): ResourceState<data> => ({ _: "Unknown" }),
-  WaitLoading: <data extends unknown>(): ResourceState<data> => ({
-    _: "WaitLoading",
+    dataWithTime: WithTime<data>
+  ): ResourceState<data> => ({ _: "Loaded", dataWithTime }),
+  Deleted: <data extends unknown>(time: Time): ResourceState<data> => ({
+    _: "Deleted",
+    time,
   }),
-  Loading: <data extends unknown>(): ResourceState<data> => ({ _: "Loading" }),
-  WaitRequesting: <data extends unknown>(): ResourceState<data> => ({
-    _: "WaitRequesting",
+  Unknown: <data extends unknown>(time: Time): ResourceState<data> => ({
+    _: "Unknown",
+    time,
   }),
   Requesting: <data extends unknown>(): ResourceState<data> => ({
     _: "Requesting",
-  }),
-  WaitUpdating: <data extends unknown>(
-    dataResource: Resource<data>
-  ): ResourceState<data> => ({ _: "WaitUpdating", dataResource }),
-  Updating: <data extends unknown>(
-    dataResource: Resource<data>
-  ): ResourceState<data> => ({ _: "Updating", dataResource }),
-  WaitRetrying: <data extends unknown>(): ResourceState<data> => ({
-    _: "WaitRetrying",
-  }),
-  Retrying: <data extends unknown>(): ResourceState<data> => ({
-    _: "Retrying",
   }),
   codec: <data extends unknown>(
     dataCodec: Codec<data>
@@ -4333,39 +4275,17 @@ export const ResourceState: {
       switch (value._) {
         case "Loaded": {
           return [0].concat(
-            Resource.codec(dataCodec).encode(value.dataResource)
+            WithTime.codec(dataCodec).encode(value.dataWithTime)
           );
+        }
+        case "Deleted": {
+          return [1].concat(Time.codec.encode(value.time));
         }
         case "Unknown": {
-          return [1];
-        }
-        case "WaitLoading": {
-          return [2];
-        }
-        case "Loading": {
-          return [3];
-        }
-        case "WaitRequesting": {
-          return [4];
+          return [2].concat(Time.codec.encode(value.time));
         }
         case "Requesting": {
-          return [5];
-        }
-        case "WaitUpdating": {
-          return [6].concat(
-            Resource.codec(dataCodec).encode(value.dataResource)
-          );
-        }
-        case "Updating": {
-          return [7].concat(
-            Resource.codec(dataCodec).encode(value.dataResource)
-          );
-        }
-        case "WaitRetrying": {
-          return [8];
-        }
-        case "Retrying": {
-          return [9];
+          return [3];
         }
       }
     },
@@ -4379,73 +4299,37 @@ export const ResourceState: {
       } = Int32.codec.decode(index, binary);
       if (patternIndex.result === 0) {
         const result: {
-          readonly result: Resource<data>;
+          readonly result: WithTime<data>;
           readonly nextIndex: number;
-        } = Resource.codec(dataCodec).decode(patternIndex.nextIndex, binary);
+        } = WithTime.codec(dataCodec).decode(patternIndex.nextIndex, binary);
         return {
           result: ResourceState.Loaded(result.result),
           nextIndex: result.nextIndex,
         };
       }
       if (patternIndex.result === 1) {
+        const result: {
+          readonly result: Time;
+          readonly nextIndex: number;
+        } = Time.codec.decode(patternIndex.nextIndex, binary);
         return {
-          result: ResourceState.Unknown(),
-          nextIndex: patternIndex.nextIndex,
+          result: ResourceState.Deleted(result.result),
+          nextIndex: result.nextIndex,
         };
       }
       if (patternIndex.result === 2) {
+        const result: {
+          readonly result: Time;
+          readonly nextIndex: number;
+        } = Time.codec.decode(patternIndex.nextIndex, binary);
         return {
-          result: ResourceState.WaitLoading(),
-          nextIndex: patternIndex.nextIndex,
+          result: ResourceState.Unknown(result.result),
+          nextIndex: result.nextIndex,
         };
       }
       if (patternIndex.result === 3) {
         return {
-          result: ResourceState.Loading(),
-          nextIndex: patternIndex.nextIndex,
-        };
-      }
-      if (patternIndex.result === 4) {
-        return {
-          result: ResourceState.WaitRequesting(),
-          nextIndex: patternIndex.nextIndex,
-        };
-      }
-      if (patternIndex.result === 5) {
-        return {
           result: ResourceState.Requesting(),
-          nextIndex: patternIndex.nextIndex,
-        };
-      }
-      if (patternIndex.result === 6) {
-        const result: {
-          readonly result: Resource<data>;
-          readonly nextIndex: number;
-        } = Resource.codec(dataCodec).decode(patternIndex.nextIndex, binary);
-        return {
-          result: ResourceState.WaitUpdating(result.result),
-          nextIndex: result.nextIndex,
-        };
-      }
-      if (patternIndex.result === 7) {
-        const result: {
-          readonly result: Resource<data>;
-          readonly nextIndex: number;
-        } = Resource.codec(dataCodec).decode(patternIndex.nextIndex, binary);
-        return {
-          result: ResourceState.Updating(result.result),
-          nextIndex: result.nextIndex,
-        };
-      }
-      if (patternIndex.result === 8) {
-        return {
-          result: ResourceState.WaitRetrying(),
-          nextIndex: patternIndex.nextIndex,
-        };
-      }
-      if (patternIndex.result === 9) {
-        return {
-          result: ResourceState.Retrying(),
           nextIndex: patternIndex.nextIndex,
         };
       }
@@ -4455,7 +4339,7 @@ export const ResourceState: {
 };
 
 /**
- * キーであるTokenによってデータが必ず1つに決まるもの. 絶対に更新されない
+ * キーであるTokenによってデータが必ず1つに決まるもの. 絶対に更新されない. リソースがないということはデータが不正な状態になっているということ
  * @typePartId 134205335ce83693fd83994e907acabd
  */
 export const StaticResourceState: {
@@ -4468,31 +4352,13 @@ export const StaticResourceState: {
    */
   readonly Unknown: <data extends unknown>() => StaticResourceState<data>;
   /**
-   * indexedDBにアクセス待ち
-   */
-  readonly WaitLoading: <data extends unknown>() => StaticResourceState<data>;
-  /**
    * indexedDBにアクセス中
    */
   readonly Loading: <data extends unknown>() => StaticResourceState<data>;
   /**
-   * サーバに問い合わせ待ち
-   */
-  readonly WaitRequesting: <data extends unknown>() => StaticResourceState<
-    data
-  >;
-  /**
    * サーバに問い合わせ中
    */
   readonly Requesting: <data extends unknown>() => StaticResourceState<data>;
-  /**
-   * Unknownだったリソースをサーバーに問い合わせ待ち
-   */
-  readonly WaitRetrying: <data extends unknown>() => StaticResourceState<data>;
-  /**
-   * Unknownだったリソースをサーバーに問い合わせ中
-   */
-  readonly Retrying: <data extends unknown>() => StaticResourceState<data>;
   readonly codec: <data extends unknown>(
     a: Codec<data>
   ) => Codec<StaticResourceState<data>>;
@@ -4504,23 +4370,11 @@ export const StaticResourceState: {
   Unknown: <data extends unknown>(): StaticResourceState<data> => ({
     _: "Unknown",
   }),
-  WaitLoading: <data extends unknown>(): StaticResourceState<data> => ({
-    _: "WaitLoading",
-  }),
   Loading: <data extends unknown>(): StaticResourceState<data> => ({
     _: "Loading",
   }),
-  WaitRequesting: <data extends unknown>(): StaticResourceState<data> => ({
-    _: "WaitRequesting",
-  }),
   Requesting: <data extends unknown>(): StaticResourceState<data> => ({
     _: "Requesting",
-  }),
-  WaitRetrying: <data extends unknown>(): StaticResourceState<data> => ({
-    _: "WaitRetrying",
-  }),
-  Retrying: <data extends unknown>(): StaticResourceState<data> => ({
-    _: "Retrying",
   }),
   codec: <data extends unknown>(
     dataCodec: Codec<data>
@@ -4533,23 +4387,11 @@ export const StaticResourceState: {
         case "Unknown": {
           return [1];
         }
-        case "WaitLoading": {
+        case "Loading": {
           return [2];
         }
-        case "Loading": {
-          return [3];
-        }
-        case "WaitRequesting": {
-          return [4];
-        }
         case "Requesting": {
-          return [5];
-        }
-        case "WaitRetrying": {
-          return [6];
-        }
-        case "Retrying": {
-          return [7];
+          return [3];
         }
       }
     },
@@ -4582,43 +4424,108 @@ export const StaticResourceState: {
       }
       if (patternIndex.result === 2) {
         return {
-          result: StaticResourceState.WaitLoading(),
+          result: StaticResourceState.Loading(),
           nextIndex: patternIndex.nextIndex,
         };
       }
       if (patternIndex.result === 3) {
         return {
-          result: StaticResourceState.Loading(),
-          nextIndex: patternIndex.nextIndex,
-        };
-      }
-      if (patternIndex.result === 4) {
-        return {
-          result: StaticResourceState.WaitRequesting(),
-          nextIndex: patternIndex.nextIndex,
-        };
-      }
-      if (patternIndex.result === 5) {
-        return {
           result: StaticResourceState.Requesting(),
-          nextIndex: patternIndex.nextIndex,
-        };
-      }
-      if (patternIndex.result === 6) {
-        return {
-          result: StaticResourceState.WaitRetrying(),
-          nextIndex: patternIndex.nextIndex,
-        };
-      }
-      if (patternIndex.result === 7) {
-        return {
-          result: StaticResourceState.Retrying(),
           nextIndex: patternIndex.nextIndex,
         };
       }
       throw new Error("存在しないパターンを指定された 型を更新してください");
     },
   }),
+};
+
+/**
+ * アカウントトークンとプロジェクトID
+ * @typePartId 4143a0787c0f06dfddc2f2f13f7e7a20
+ */
+export const AccountTokenAndProjectId: {
+  readonly codec: Codec<AccountTokenAndProjectId>;
+} = {
+  codec: {
+    encode: (value: AccountTokenAndProjectId): ReadonlyArray<number> =>
+      AccountToken.codec
+        .encode(value.accountToken)
+        .concat(ProjectId.codec.encode(value.projectId)),
+    decode: (
+      index: number,
+      binary: Uint8Array
+    ): {
+      readonly result: AccountTokenAndProjectId;
+      readonly nextIndex: number;
+    } => {
+      const accountTokenAndNextIndex: {
+        readonly result: AccountToken;
+        readonly nextIndex: number;
+      } = AccountToken.codec.decode(index, binary);
+      const projectIdAndNextIndex: {
+        readonly result: ProjectId;
+        readonly nextIndex: number;
+      } = ProjectId.codec.decode(accountTokenAndNextIndex.nextIndex, binary);
+      return {
+        result: {
+          accountToken: accountTokenAndNextIndex.result,
+          projectId: projectIdAndNextIndex.result,
+        },
+        nextIndex: projectIdAndNextIndex.nextIndex,
+      };
+    },
+  },
+};
+
+/**
+ * 型パーツのリストを変更する
+ * @typePartId 0d8c602dce6d495c31fbde469acf235d
+ */
+export const SetTypePartListParameter: {
+  readonly codec: Codec<SetTypePartListParameter>;
+} = {
+  codec: {
+    encode: (value: SetTypePartListParameter): ReadonlyArray<number> =>
+      AccountToken.codec
+        .encode(value.accountToken)
+        .concat(ProjectId.codec.encode(value.projectId))
+        .concat(
+          List.codec(IdAndData.codec(TypePartId.codec, TypePart.codec)).encode(
+            value.typePartList
+          )
+        ),
+    decode: (
+      index: number,
+      binary: Uint8Array
+    ): {
+      readonly result: SetTypePartListParameter;
+      readonly nextIndex: number;
+    } => {
+      const accountTokenAndNextIndex: {
+        readonly result: AccountToken;
+        readonly nextIndex: number;
+      } = AccountToken.codec.decode(index, binary);
+      const projectIdAndNextIndex: {
+        readonly result: ProjectId;
+        readonly nextIndex: number;
+      } = ProjectId.codec.decode(accountTokenAndNextIndex.nextIndex, binary);
+      const typePartListAndNextIndex: {
+        readonly result: List<IdAndData<TypePartId, TypePart>>;
+        readonly nextIndex: number;
+      } = List.codec(IdAndData.codec(TypePartId.codec, TypePart.codec)).decode(
+        projectIdAndNextIndex.nextIndex,
+        binary
+      );
+      return {
+        result: {
+          accountToken: accountTokenAndNextIndex.result,
+          projectId: projectIdAndNextIndex.result,
+          typePartList: typePartListAndNextIndex.result,
+        },
+        nextIndex: typePartListAndNextIndex.nextIndex,
+      };
+    },
+  },
 };
 
 /**
