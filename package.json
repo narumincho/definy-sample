@@ -12,7 +12,10 @@
     "typescript": "4.1.3"
   },
   "scripts": {
-    "start": "node ./schemaStart.js"
+    "preschemaStart": "npx tsc",
+    "schemaStart": "node ./dist/schema.js",
+    "prestartMain": "npx tsc",
+    "startMain": "node ./dist/main.js"
   },
   "repository": {
     "type": "git",
